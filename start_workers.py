@@ -4,14 +4,12 @@ from subprocess import Popen
 
 try:
     load_dotenv()
-    WORKERS_LIST = os.environ.get("WORKERS", "worker").split(" ")
+    WORKERS = int(os.environ.get("WORKERS", 10))
     DEFAULT_PORT = int(os.environ.get("DEFAULT_PORT", "8000"))
-    if WORKERS_LIST == None:
-        raise "WORKERS environment variable not set"
 
-    for worker in WORKERS_LIST:
-        port = str(DEFAULT_PORT + WORKERS_LIST.index(worker))
-        Popen("python worker.py {} {}".format(worker, str(port)))
+    for i in range(WORKERS):
+        port = DEFAULT_PORT + i
+        Popen("python worker.py worker{} {}".format(i + 1, str(port)))
 
 except Exception as e:
     print(e)
