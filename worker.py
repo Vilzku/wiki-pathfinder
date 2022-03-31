@@ -11,16 +11,18 @@ WIKI_URL = "https://en.wikipedia.org/w/api.php"
 
 
 def getLinks(page):
+    # TODO what if the page does not exist
     print(NAME + " received request for: " + page)
     params = {"action": "parse", "page": page, "format": "json", "prop": "links"}
-    try:
-        response = requests.get(url=WIKI_URL, params=params)
-        data = response.json()
-        links = data["parse"]["links"]
-        return [link["*"] for link in links]
-    except Exception as e:
-        print("Error: " + str(e))
-        return None
+    response = requests.get(url=WIKI_URL, params=params)
+    data = response.json()
+    page_data = data.get("parse")
+    if page_data is None:
+        return False
+    links = page_data.get("links")
+    if links is None:
+        return False
+    return [link["*"] for link in links]
 
 
 worker.register_function(getLinks, "getLinks")
