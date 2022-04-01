@@ -11,11 +11,12 @@ WIKI_URL = "https://en.wikipedia.org/w/api.php"
 
 
 def getLinks(page):
-    # TODO what if the page does not exist
     print(NAME + " received request for: " + page)
     params = {"action": "parse", "page": page, "format": "json", "prop": "links"}
     response = requests.get(url=WIKI_URL, params=params)
     data = response.json()
+    if data.get("error") is not None:
+        return []
     page_data = data.get("parse")
     if page_data is None:
         return False
