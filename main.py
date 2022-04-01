@@ -3,6 +3,7 @@ from dotenv import load_dotenv
 import os
 import threading
 import time
+import sys
 
 load_dotenv()
 WORKERS = int(os.environ.get("WORKERS", 10))
@@ -48,7 +49,10 @@ class Node:
         self.linked_pages = []
 
 
+start = sys.argv[1]
+end = sys.argv[2]
 searched_pages = []
+page_found = False
 
 # Traverse tree horizontally and find first empty page
 def findNextPage(page):
@@ -98,6 +102,7 @@ def findWorker():
 
 
 def getLinks(worker, page):
+    global page_found
     try:
         worker["status"] = 1
         # print("getLinks", page, worker["name"])
@@ -119,6 +124,8 @@ def getLinks(worker, page):
             raise Exception(
                 "{} failed to get links for {}".format(worker["name"], page.getName())
             )
+        if end in links:
+            page_found = True
     except Exception as e:
         searched_pages.remove(page.getName())
         page.resetLinkedPages()
@@ -147,7 +154,7 @@ def checkIfPageExists(page_name):
 def mainLoop(start, end):
     root = Node(start)
     while True:
-        if end in searched_pages:
+        if page_found:
             return findPath(root, end)
         page = findNextPage(root)
         if page == None:
@@ -196,10 +203,8 @@ def showLoading(start, end):
         )
         time.sleep(0.075)
         i += 1
+    print("                                                             ", end="\r")
 
-
-start = "Josh Wardle"
-end = "Mona Lisa"
 
 if start == end:
     print("Start and end page cannot be the same")
@@ -219,6 +224,10 @@ else:
     path = mainLoop(start, end)
     end_time = time.time()
     show_loading = False
-    print("Path found! {}".format(path))
+    time.sleep(0.075)
+    print("Path found! {}".format(path[0]), end="")
+    for link in path[1:]:
+        print(" -> {}".format(link), end="")
+    print(" (Length: {} links)".format(len(path) - 1))
     minutes, seconds = divmod(end_time - start_time, 60)
     print("Time taken: {:.0f} min {:.0f} s".format(minutes, seconds))
