@@ -29,6 +29,7 @@ class Node:
     def __init__(self, name):
         self.name = name
         self.linked_pages = []
+        self.all_searched = False
 
     def __str__(self):
         return self.name
@@ -48,6 +49,12 @@ class Node:
     def resetLinkedPages(self):
         self.linked_pages = []
 
+    def setAllSearched(self):
+        self.all_searched = True
+
+    def getAllSearched(self):
+        return self.all_searched
+
 
 start = sys.argv[1]
 end = sys.argv[2]
@@ -58,9 +65,12 @@ page_found = False
 def findNextPage(page):
     if page.getName() not in searched_pages:
         return page
-    for child in page.getLinkedPages():
-        if child.getName() not in searched_pages:
-            return child
+    if page.getAllSearched() == False:
+        for child in page.getLinkedPages():
+            if child.getName() not in searched_pages:
+                return child
+            elif page.getLinkedPages().index(child) == len(page.getLinkedPages()) - 1:
+                page.setAllSearched()
     for child in page.getLinkedPages():
         next_page = findNextPage(child)
         if next_page != None:
