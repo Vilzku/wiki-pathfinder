@@ -136,14 +136,13 @@ def getLinks(worker, page):
             )
         if end in links:
             page_found = True
+        worker["status"] = 0
     except Exception as e:
+        worker["status"] = -1
         searched_pages.remove(page.getName())
         page.resetLinkedPages()
         print("Error:", e)
         # TODO: if cannot connect remove worker from list or idk do something
-    finally:
-        worker["status"] = 0
-        return True
 
 
 def checkIfPageExists(page_name):
@@ -208,7 +207,9 @@ def showLoading(start, end):
     i = 0
     while show_loading:
         print(
-            "Searching path from {} to {}... {}".format(start, end, bar[i % len(bar)]),
+            "Searching path from {} to {}... {} {}".format(
+                start, end, bar[i % len(bar)], len(searched_pages)
+            ),
             end="\r",
         )
         time.sleep(0.075)
@@ -238,6 +239,7 @@ else:
     print("Path found! {}".format(path[0]), end="")
     for link in path[1:]:
         print(" -> {}".format(link), end="")
-    print(" (Length: {} links)".format(len(path) - 1))
+    print(" (Length: {} links)".format(len(path) - 1), end="")
+    print(" {} pages searched".format(len(searched_pages)))
     minutes, seconds = divmod(end_time - start_time, 60)
     print("Time taken: {:.0f} min {:.0f} s".format(minutes, seconds))
