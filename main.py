@@ -56,27 +56,40 @@ class Node:
         return self.all_searched
 
 
-start = sys.argv[1]
-end = sys.argv[2]
-searched_pages = []
-page_found = False
-
-# Traverse tree horizontally and find first empty page
-def findNextPage(page):
-    if page.getName() not in searched_pages:
-        return page
-    if page.getAllSearched() == False:
-        for child in page.getLinkedPages():
+# Traverse tree horizontally and find first empty child pages
+def findNextPages(root):
+    if root.getAllSearched() == False:
+        for child in root.getLinkedPages():
             if child.getName() not in searched_pages:
                 return child
-            elif page.getLinkedPages().index(child) == len(page.getLinkedPages()) - 1:
-                page.setAllSearched()
-    for child in page.getLinkedPages():
-        next_page = findNextPage(child)
-        if next_page != None:
-            return next_page
+            elif root.getLinkedPages().index(child) == len(root.getLinkedPages()) - 1:
+                root.setAllSearched()
+
+    for child in root.getLinkedPages():
+        if child.getAllSearched() == False:
+            for grandchild in child.getLinkedPages():
+                if grandchild.getName() not in searched_pages:
+                    return grandchild
+                elif (
+                    child.getLinkedPages().index(grandchild)
+                    == len(child.getLinkedPages()) - 1
+                ):
+                    child.setAllSearched()
+
+    for child in root.getLinkedPages():
+        for grandchild in child.getLinkedPages():
+            if grandchild.getAllSearched() == False:
+                for greatgrandchild in grandchild.getLinkedPages():
+                    if greatgrandchild.getName() not in searched_pages:
+                        return greatgrandchild
+                    elif (
+                        grandchild.getLinkedPages().index(greatgrandchild)
+                        == len(grandchild.getLinkedPages()) - 1
+                    ):
+                        grandchild.setAllSearched()
 
 
+# At the end find the path from start to end
 def findPath(root, end):
     path = [end]
 
@@ -100,40 +113,41 @@ def findPath(root, end):
     return path
 
 
+# Find a worker that is not busy
 def findWorker():
-    should_loop = True
-    while should_loop:
-        should_loop = False
+    while True:
         for worker in workers:
             if worker["status"] == 0:
                 return worker
-            if worker["name"] == workers[-1]["name"]:
-                should_loop = True
 
 
+# Get all links from a page using selected worker
 def getLinks(worker, page):
     global page_found
     try:
         worker["status"] = 1
-        # print("getLinks", page, worker["name"])
         links = worker["proxy"].getLinks(page.getName())
         if links != False:
             for link in links:
-                if (
-                    link not in searched_pages
-                    and "File:" not in link
-                    and "Help:" not in link
-                    and "Template:" not in link
-                    and "Talk:" not in link
-                    and "Template talk:" not in link
-                    and "Wikipedia:" not in link
-                    and "Category:" not in link
+                if any(
+                    [
+                        x in link
+                        for x in [
+                            "File:",
+                            "Help:",
+                            "Template:",
+                            "Talk:",
+                            "Template talk:",
+                            "Wikipedia:",
+                            "Category:",
+                        ]
+                    ]
                 ):
+                    continue
+                if link not in searched_pages:
                     page.addLink(Node(link))
         else:
-            raise Exception(
-                "{} failed to get links for {}".format(worker["name"], page.getName())
-            )
+            raise Exception("Failed to get links for {}".format(page.getName()))
         if end in links:
             page_found = True
         worker["status"] = 0
@@ -141,10 +155,13 @@ def getLinks(worker, page):
         worker["status"] = -1
         searched_pages.remove(page.getName())
         page.resetLinkedPages()
-        print("Error:", e)
-        # TODO: if cannot connect remove worker from list or idk do something
+        print(
+            "Error: {}: {}".format(worker["name"], e),
+            end=" " * 50 + "\n",
+        )
 
 
+# Use wroker to find out if a Wikipedia page exists
 def checkIfPageExists(page_name):
     try:
         worker = findWorker()
@@ -160,16 +177,21 @@ def checkIfPageExists(page_name):
         worker["status"] = 0
 
 
+# Go through all the links and find the end page
 def mainLoop(start, end):
     root = Node(start)
+    getLinks(workers[0], root)
     while True:
         if page_found:
             return findPath(root, end)
-        page = findNextPage(root)
+        start_time = time.time()
+        page = findNextPages(root)
+        end_time = time.time()
+        print(end_time - start_time)
         if page == None:
             continue
-        searched_pages.append(page.getName())
         try:
+            searched_pages.append(page.getName())
             worker = findWorker()
             threading.Thread(
                 target=getLinks,
@@ -179,30 +201,27 @@ def mainLoop(start, end):
                 ),
             ).start()
         except Exception as e:
-            print(e)
+            print(
+                "Error: {}".format(e),
+                end=" " * 50 + "\n",
+            )
 
 
-show_loading = True
-
-
+# Display status bar animation and page counter
 def showLoading(start, end):
     bar = [
-        " [=     ]",
-        " [==    ]",
-        " [ ==   ]",
-        " [  ==  ]",
-        " [   == ]",
-        " [    ==]",
-        " [     =]",
-        " [      ]",
-        " [     =]",
-        " [    ==]",
-        " [   == ]",
-        " [  ==  ]",
-        " [ ==   ]",
-        " [==    ]",
-        " [=     ]",
-        " [      ]",
+        "[=     ]",
+        "[==    ]",
+        "[ ==   ]",
+        "[  ==  ]",
+        "[   == ]",
+        "[    ==]",
+        "[     =]",
+        "[    ==]",
+        "[   == ]",
+        "[  ==  ]",
+        "[ ==   ]",
+        "[==    ]",
     ]
     i = 0
     while show_loading:
@@ -214,17 +233,22 @@ def showLoading(start, end):
         )
         time.sleep(0.075)
         i += 1
-    print("                                                             ", end="\r")
 
 
-if start == end:
-    print("Start and end page cannot be the same")
-elif not checkIfPageExists(end):
-    print("End page does not exist")
-elif not checkIfPageExists(start):
-    print("Start page does not exist")
-else:
-    start_time = time.time()
+def main():
+    global show_loading
+    print("Starting the program...", end="\r")
+
+    if start == end:
+        print("Start and end page cannot be the same")
+        return
+    if not checkIfPageExists(end):
+        print("End page does not exist")
+        return
+    if not checkIfPageExists(start):
+        print("Start page does not exist")
+        return
+
     threading.Thread(
         target=showLoading,
         args=(
@@ -232,14 +256,28 @@ else:
             end,
         ),
     ).start()
+
+    start_time = time.time()
     path = mainLoop(start, end)
     end_time = time.time()
+
     show_loading = False
     time.sleep(0.075)
-    print("Path found! {}".format(path[0]), end="")
+    print(" " * 70, end="\r")
+    print("Path found!")
+    print("   " + path[0])
     for link in path[1:]:
-        print(" -> {}".format(link), end="")
-    print(" (Length: {} links)".format(len(path) - 1), end="")
-    print(" {} pages searched".format(len(searched_pages)))
+        print("-> {}".format(link))
+    print("Length: {} links.".format(len(path) - 1), end="")
+    print(" {} pages searched.".format(len(searched_pages)))
     minutes, seconds = divmod(end_time - start_time, 60)
     print("Time taken: {:.0f} min {:.0f} s".format(minutes, seconds))
+
+
+start = sys.argv[1]  # Start page
+end = sys.argv[2]  # End page
+searched_pages = [start]  # Pages that have already been searched
+page_found = False  # Is the end page found in searched pages
+show_loading = True  # Show loading animation
+
+main()
