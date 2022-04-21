@@ -56,37 +56,44 @@ class Node:
         return self.all_searched
 
 
+search_depth = 1
+
 # Traverse tree horizontally and find first empty child pages
-def findNextPages(root):
-    if root.getAllSearched() == False:
-        for child in root.getLinkedPages():
+def findNextPage(node, depth=1):
+    global search_depth
+
+    if node.getAllSearched() == False:
+        for child in node.getLinkedPages():
             if child.getName() not in searched_pages:
                 return child
-            elif root.getLinkedPages().index(child) == len(root.getLinkedPages()) - 1:
-                root.setAllSearched()
+            elif node.getLinkedPages().index(child) == len(node.getLinkedPages()) - 1:
+                node.setAllSearched()
 
-    for child in root.getLinkedPages():
-        if child.getAllSearched() == False:
-            for grandchild in child.getLinkedPages():
-                if grandchild.getName() not in searched_pages:
-                    return grandchild
-                elif (
-                    child.getLinkedPages().index(grandchild)
-                    == len(child.getLinkedPages()) - 1
-                ):
-                    child.setAllSearched()
+    if depth < search_depth:
+        for child in node.getLinkedPages():
+            next_node = findNextPage(child, depth + 1)
+            if next_node != None:
+                return next_node
 
-    for child in root.getLinkedPages():
-        for grandchild in child.getLinkedPages():
-            if grandchild.getAllSearched() == False:
-                for greatgrandchild in grandchild.getLinkedPages():
-                    if greatgrandchild.getName() not in searched_pages:
-                        return greatgrandchild
-                    elif (
-                        grandchild.getLinkedPages().index(greatgrandchild)
-                        == len(grandchild.getLinkedPages()) - 1
-                    ):
-                        grandchild.setAllSearched()
+
+# Update search depth based on last child's depth
+def updateSearchDepth(root):
+    global search_depth
+
+    def getLastChild(node):
+        if len(node.getLinkedPages()) == 0:
+            return None
+        else:
+            return node.getLinkedPages()[-1]
+
+    depth = 0
+    last_child = root
+    while True:
+        last_child = getLastChild(last_child)
+        if last_child == None:
+            search_depth = depth
+            break
+        depth += 1
 
 
 # At the end find the path from start to end
@@ -115,10 +122,37 @@ def findPath(root, end):
 
 # Find a worker that is not busy
 def findWorker():
-    while True:
+    stop_loop = False
+    while not stop_loop:
+        stop_loop = True
         for worker in workers:
             if worker["status"] == 0:
                 return worker
+            elif worker["status"] != -1:
+                stop_loop = False
+
+
+# Remove pages that are not real Wikipedia pages
+def filterLinks(links):
+    filtered_links = []
+    for link in links:
+        if not any(
+            [
+                x in link
+                for x in [
+                    "File:",
+                    "Help:",
+                    "Template:",
+                    "Talk:",
+                    "Template talk:",
+                    "Wikipedia:",
+                    "Category:",
+                    "Module:",
+                ]
+            ]
+        ):
+            filtered_links.append(link)
+    return filtered_links
 
 
 # Get all links from a page using selected worker
@@ -127,37 +161,28 @@ def getLinks(worker, page):
     try:
         worker["status"] = 1
         links = worker["proxy"].getLinks(page.getName())
-        if links != False:
-            for link in links:
-                if any(
-                    [
-                        x in link
-                        for x in [
-                            "File:",
-                            "Help:",
-                            "Template:",
-                            "Talk:",
-                            "Template talk:",
-                            "Wikipedia:",
-                            "Category:",
-                        ]
-                    ]
-                ):
-                    continue
-                if link not in searched_pages:
-                    page.addLink(Node(link))
-        else:
-            raise Exception("Failed to get links for {}".format(page.getName()))
+        if links == False:
+            worker["status"] = 0
+            searched_pages.remove(page.getName())
+            return
+
+        # Add links to parent page
+        for link in filterLinks(links):
+            if link not in searched_pages:
+                page.addLink(Node(link))
+
         if end in links:
             page_found = True
         worker["status"] = 0
+
+    # Handle worker errors
     except Exception as e:
         worker["status"] = -1
         searched_pages.remove(page.getName())
         page.resetLinkedPages()
         print(
             "Error: {}: {}".format(worker["name"], e),
-            end=" " * 50 + "\n",
+            end=" " * 80 + "\n",
         )
 
 
@@ -177,22 +202,26 @@ def checkIfPageExists(page_name):
         worker["status"] = 0
 
 
-# Go through all the links and find the end page
+# Loop through all pages and create worker threads
 def mainLoop(start, end):
     root = Node(start)
     getLinks(workers[0], root)
     while True:
-        if page_found:
-            return findPath(root, end)
-        start_time = time.time()
-        page = findNextPages(root)
-        end_time = time.time()
-        print(end_time - start_time)
-        if page == None:
-            continue
         try:
+            if page_found:
+                return findPath(root, end)
+
+            # Find next page to search
+            updateSearchDepth(root)
+            page = findNextPage(root)
+            if page == None:
+                continue
             searched_pages.append(page.getName())
+
+            # Find worker and start thread
             worker = findWorker()
+            if worker == None:
+                return None
             threading.Thread(
                 target=getLinks,
                 args=(
@@ -200,10 +229,15 @@ def mainLoop(start, end):
                     page,
                 ),
             ).start()
+
+        except KeyboardInterrupt:
+            print(" " * 100, end="\r")
+            print("Manual interrupt")
+            return None
         except Exception as e:
             print(
                 "Error: {}".format(e),
-                end=" " * 50 + "\n",
+                end=" " * 80 + "\n",
             )
 
 
@@ -226,8 +260,8 @@ def showLoading(start, end):
     i = 0
     while show_loading:
         print(
-            "Searching path from {} to {}... {} {}".format(
-                start, end, bar[i % len(bar)], len(searched_pages)
+            "Searching path from {} to {}... {} {} pages searched. Depth: {}".format(
+                start, end, bar[i % len(bar)], len(searched_pages), search_depth
             ),
             end="\r",
         )
@@ -263,7 +297,12 @@ def main():
 
     show_loading = False
     time.sleep(0.075)
-    print(" " * 70, end="\r")
+    print(" " * 100, end="\r")
+
+    if path == None:
+        print("Failed to find path!")
+        return
+
     print("Path found!")
     print("   " + path[0])
     for link in path[1:]:
@@ -276,7 +315,7 @@ def main():
 
 start = sys.argv[1]  # Start page
 end = sys.argv[2]  # End page
-searched_pages = [start]  # Pages that have already been searched
+searched_pages = []  # Pages that have already been searched
 page_found = False  # Is the end page found in searched pages
 show_loading = True  # Show loading animation
 

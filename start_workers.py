@@ -4,7 +4,7 @@ from subprocess import Popen
 
 try:
     load_dotenv()
-    WORKERS = int(os.environ.get("WORKERS", 10))
+    WORKERS = int(os.environ.get("WORKERS", 50))
     DEFAULT_PORT = int(os.environ.get("DEFAULT_PORT", "8000"))
 
     for i in range(WORKERS):
